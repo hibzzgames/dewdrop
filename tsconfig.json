@@ -1,0 +1,38 @@
+{
+  "include": [ "**/*.ts" ],
+  "exclude": [ "node_modules", "dist" ],
+  "compilerOptions": {
+    // Environment setup & latest features
+    "rootDir": "./src",
+    "paths": {
+      "*": [ "./src/*" ]
+    },
+    "lib": [ "DOM", "ESNext" ],
+    "types": [ "bun", "node" ],
+    "target": "ESNext",
+    "module": "esnext",
+    "allowJs": true,
+
+    // Bundler mode
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+
+    "strict": false,
+    "strictNullChecks": false,
+    "skipLibCheck": true,
+    
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitAny": false,
+    "noImplicitOverride": true,
+    "noImplicitThis": true,
+
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noPropertyAccessFromIndexSignature": false,
+
+    "noImplicitReturns": true,
+  }
+}
