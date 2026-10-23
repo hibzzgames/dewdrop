@@ -6,7 +6,7 @@
 //              javascript files
 // -------------------------------------------------------------------------------------------------
 
-import { BuildContext } from 'dewdrop/context';
+import { BuildContext, RuntimeContext, type ContextConfig } from 'dewdrop/context';
 import { HashString } from 'dewdrop/hash';
 import { ApplyCss } from 'dewdrop/style';
 import { AddWebpageScript, CreateEmptyWebpage } from 'dewdrop/webpage';
@@ -20,7 +20,12 @@ const context_import_path = resolve( 'src/dewdrop/context' );
 const style_import_path   = resolve( 'src/dewdrop/style' );
 
 export type BuildType = "dev" | "prod";
-export type CompilePageFn = < T >( route : string, fn : ( ctx : BuildContext, params : T ) => void, params : T ) => void;
+export type CompilePageFn = < T = any, B extends BuildContext = BuildContext, R extends RuntimeContext = RuntimeContext >( 
+    route : string, 
+    fn : ( ctx : BuildContext, params : T ) => void, 
+    params : T, 
+    context_config? : ContextConfig< B, R > 
+) => void;
 
 // In memory filesystem for dev mode
 export interface BuildOutput
@@ -38,10 +43,10 @@ export async function Build( mode : BuildType ) : Promise< BuildOutput >
     Log.message( "generating website" );
 
     // Internal function used to compile and save the route to the pages
-    function m_compilePage< T = any >( route : string, fn : ( ctx : BuildContext, params : T ) => void, params : T )
+    const m_compilePage : CompilePageFn = ( route, fn, params, context_config ) =>
     {
         // Create a new a build context
-        const ctx : BuildContext = new BuildContext();
+        const ctx = context_config?.build ? new context_config.build() : new BuildContext();
         ctx.doc = CreateEmptyWebpage();
 
         // Add a style tag to the head and store a reference to it in the style data. Components can 
@@ -58,6 +63,9 @@ export async function Build( mode : BuildType ) : Promise< BuildOutput >
         // Look at the dynamic components needed and generate the dynamic component loader
         if( ctx.dynamic_components.size > 0 )
         {
+            const runtime_name : string = context_config?.runtime ? context_config.runtime.ctor.name : 'RuntimeContext';
+            const runtime_path : string = context_config?.runtime ? resolve( context_config.runtime.import_path ) : context_import_path;
+
             const imports : string = Array.from( ctx.dynamic_components, ( [ path, names ] ) => { 
                 return `import { ${ Array.from( names ).join( ', ' ) } } from '${ path }';`;
             } ).join( '\n' );
@@ -69,13 +77,13 @@ export async function Build( mode : BuildType ) : Promise< BuildOutput >
             } ).join( ',\n' );
 
             const code = `import { Hydrate } from '${ hydrate_import_path }';\n` + 
-                         `import { RuntimeContext } from '${ context_import_path }';\n` +
+                         `import { ${ runtime_name } } from '${ runtime_path }';\n` +
                          `import { InitCachedStyleData } from '${ style_import_path }';\n` +
                          `${ imports }\n\n` +
                          `const dynamic_components = new Map( [\n` +
                          `${ component_map_content }` +
                          `] );\n\n` + 
-                         `const ctx = new RuntimeContext();\n`+
+                         `const ctx = new ${ runtime_name }();\n`+
                          `ctx.doc = document;\n` +
                          `ctx.style_data.doc_style = document.querySelector( 'style#primary' );\n\n` +
                          `InitCachedStyleData( ctx.style_data );\n\n` +
