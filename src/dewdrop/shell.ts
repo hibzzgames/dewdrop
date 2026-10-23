@@ -39,7 +39,13 @@ export function $( cmd : TemplateStringsArray ) : Bun.$.ShellPromise
 {
     Log.message( "" );
     console.log( `${ ANSI_RESET }${ ANSI_DIM }${ ANSI_MAGENTA }$${ ANSI_RESET }${ ANSI_DIM }${ ANSI_BOLD } ${ cmd }${ ANSI_RESET }` );
-    return Bun.$( cmd );
+    
+    const shell = Bun.$( cmd );
+    if( process.stdout.isTTY )
+    {
+        return shell.env( { ...process.env, FORCE_COLOR: '1' } );
+    }
+    return shell;
 }
 
 export async function* Input() : AsyncGenerator< string >
