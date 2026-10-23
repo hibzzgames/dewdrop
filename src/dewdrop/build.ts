@@ -6,7 +6,7 @@
 //              javascript files
 // -------------------------------------------------------------------------------------------------
 
-import { BuildContext } from 'dewdrop/context';
+import { BuildContext, RuntimeContext, type ContextConfig } from 'dewdrop/context';
 import { HashString } from 'dewdrop/hash';
 import { ApplyCss } from 'dewdrop/style';
 import { AddWebpageScript, CreateEmptyWebpage } from 'dewdrop/webpage';
@@ -20,7 +20,12 @@ const context_import_path = resolve( 'src/dewdrop/context' );
 const style_import_path   = resolve( 'src/dewdrop/style' );
 
 export type BuildType = "dev" | "prod";
-export type CompilePageFn = < T >( route : string, fn : ( ctx : BuildContext, params : T ) => void, params : T ) => void;
+export type CompilePageFn = < T = any, B extends BuildContext = BuildContext, R extends RuntimeContext = RuntimeContext >( 
+    route : string, 
+    fn : ( ctx : BuildContext, params : T ) => void, 
+    params : T, 
+    context_config? : ContextConfig< B, R > 
+) => void;
 
 // In memory filesystem for dev mode
 export interface BuildOutput
@@ -38,10 +43,10 @@ export async function Build( mode : BuildType ) : Promise< BuildOutput >
     Log.message( "generating website" );
 
     // Internal function used to compile and save the route to the pages
-    function m_compilePage< T = any >( route : string, fn : ( ctx : BuildContext, params : T ) => void, params : T )
+    const m_compilePage : CompilePageFn = ( route, fn, params, context_config ) =>
     {
         // Create a new a build context
-        const ctx : BuildContext = new BuildContext();
+        const ctx = context_config?.build ? new context_config.build() : new BuildContext();
         ctx.doc = CreateEmptyWebpage();
 
         // Add a style tag to the head and store a reference to it in the style data. Components can 
@@ -58,6 +63,9 @@ export async function Build( mode : BuildType ) : Promise< BuildOutput >
         // Look at the dynamic components needed and generate the dynamic component loader
         if( ctx.dynamic_components.size > 0 )
         {
+            const runtime_name : string = context_config?.runtime ? context_config.runtime.ctor.name : 'RuntimeContext';
+            const runtime_path : string = context_config?.runtime ? resolve( context_config.runtime.import_path ) : context_import_path;
+
             const imports : string = Array.from( ctx.dynamic_components, ( [ path, names ] ) => { 
                 return `import { ${ Array.from( names ).join( ', ' ) } } from '${ path }';`;
             } ).join( '\n' );
@@ -69,13 +77,13 @@ export async function Build( mode : BuildType ) : Promise< BuildOutput >
             } ).join( ',\n' );
 
             const code = `import { Hydrate } from '${ hydrate_import_path }';\n` + 
-                         `import { RuntimeContext } from '${ context_import_path }';\n` +
+                         `import { ${ runtime_name } } from '${ runtime_path }';\n` +
                          `import { InitCachedStyleData } from '${ style_import_path }';\n` +
                          `${ imports }\n\n` +
                          `const dynamic_components = new Map( [\n` +
                          `${ component_map_content }` +
                          `] );\n\n` + 
-                         `const ctx = new RuntimeContext();\n`+
+                         `const ctx = new ${ runtime_name }();\n`+
                          `ctx.doc = document;\n` +
                          `ctx.style_data.doc_style = document.querySelector( 'style#primary' );\n\n` +
                          `InitCachedStyleData( ctx.style_data );\n\n` +
@@ -102,6 +110,68 @@ export async function Build( mode : BuildType ) : Promise< BuildOutput >
             }
 
             AddWebpageScript( ctx.doc, code_route, true );
+        }
+
+        // Additionally, in the dev mode, inject a script to reroute the browser's console.log to 
+        // the terminal application that's hosting the dev server
+        if( mode === 'dev' )
+        {
+            const code_route = '/scripts/dev-log.js';
+            if( !build_output.files.has( code_route ) )
+            {
+                const code = `( () => {\n` +
+                             `const socket = new WebSocket( 'ws://' + location.host );\n` +
+                             `const queue = [];\n` +
+                             `socket.addEventListener( 'open', () => queue.splice( 0 ).forEach( ( msg ) => socket.send( msg ) ) );\n` +
+                             
+                             `function Send( msg )\n` +
+                             `{\n` +
+                             `    socket.readyState === 1 ? socket.send( msg ) : queue.push( msg );\n` +
+                             `}\n` +
+                             
+                             `function Serialize( value )\n` +
+                             `{\n` +
+                             `    if( value instanceof Error )\n` +
+                             `    {\n` +
+                             `        return value.stack || String( value );\n` +
+                             `    }\n` +
+                             `    if( typeof value === 'object' && value !== null )\n` +
+                             `    {\n` +
+                             `        try\n` +
+                             `        {\n` +
+                             `            return JSON.stringify( value );\n` +
+                             `        }\n` +
+                             `        catch\n` +
+                             `        {\n` +
+                             `            return String( value );\n` +
+                             `        }\n` +
+                             `    }\n` +
+                             `    return String( value );\n` +
+                             `}\n` +
+                             
+                             `function Report( level, args )\n` +
+                             `{\n` +
+                             `    Send( JSON.stringify( { type: 'console', level, page: location.pathname, args } ) );\n` +
+                             `}\n` +
+                             
+                             `for( const level of [ 'log', 'info', 'warn', 'error', 'debug' ] )\n` +
+                             `{\n` +
+                             `    const original = console[ level ];\n` +
+                             `    console[ level ] = ( ...args ) => \n` +
+                             `    {\n` +
+                             `        original.apply( console, args );\n` +
+                             `        Report( level, args.map( Serialize ) );\n` +
+                             `    }\n` +
+                             `}\n` +
+                             
+                             `addEventListener( 'error', e => Report( 'error', [ e.message + ' (' + e.filename + ':' + e.lineno + ')' ] ) );\n` +
+                             `addEventListener( 'unhandledrejection', e => Report( 'error', [ 'Unhandled rejection: ' + Serialize( e.reason ) ] ) );\n` +
+                             `} )();`
+
+                build_output.files.set( code_route, code );
+            }
+
+            AddWebpageScript( ctx.doc, code_route, false );
         }
 
         // Loop around all in-line styles set by the components, extract them out, and place it in 

@@ -7,28 +7,23 @@
 //              other components using the dewdrop framework
 // -------------------------------------------------------------------------------------------------
 
-import type { CustomBuildtimeData, CustomCommonData, CustomRuntimeData } from "config";
 import type { AtStyleRule, StyleData, StyleRule } from "./style";
 
 /** The common interface shared by the dewdrop contexts */
-export interface DewdropContext
+export class DewdropContext
 {
-    doc : Document;
-    style_data : StyleData;
-    custom_data : CustomCommonData;
+    doc : Document          = null;
+    style_data : StyleData  = {
+        doc_style: null,
+        registered_classes: new Set< string >(),
+        rules: new Map< number, StyleRule >(),
+        at_rules: new Map< number, AtStyleRule >()
+    };
 }
 
-/** The buildtime specific context */
-export class BuildContext implements DewdropContext
+/** The default build-time specific context */
+export class BuildContext extends DewdropContext
 {
-    doc : Document = null;
-    style_data : StyleData = { 
-         doc_style : null, 
-         registered_classes : new Set< string >(),
-         rules : new Map< number, StyleRule >(),
-         at_rules : new Map< number, AtStyleRule >(),
-     };
-    
     dynamic_components : Map< string /* import_path */, Set< string /* component_name */ > > = new Map< string, Set< string > >();
 
     TrackDynamicComponent( import_path : string, component_name : string ) : void
@@ -41,22 +36,19 @@ export class BuildContext implements DewdropContext
         }
         component_names.add( component_name );
     }
-
-    custom_data : CustomBuildtimeData = null;
 };
 
-/** The runtime specific context */
-export class RuntimeContext implements DewdropContext
+/** The default runtime specific context */
+export class RuntimeContext extends DewdropContext
 {
-    doc : Document = null;
-    
-    style_data : StyleData = { 
-        doc_style : null, 
-        registered_classes : new Set< string >(),
-        rules : new Map< number, StyleRule >(),
-        at_rules : new Map< number, AtStyleRule >(),
-    };
-
-    custom_data : CustomRuntimeData = null;
 }
 
+/** An interface that can be provided to the define the BuildContext and RuntimeContext to use */
+export interface ContextConfig< B extends BuildContext = BuildContext, R extends RuntimeContext = RuntimeContext >
+{
+    build? : new () => B;
+    runtime? : {
+        ctor: new () => R;
+        import_path : string;
+    }
+}

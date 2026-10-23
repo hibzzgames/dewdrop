@@ -77,7 +77,7 @@ const dewdrop_commands : Command[] = [
                 hint: 'build hosted locally that watches and refreshes on saved changes',
                 action: async () =>
                 {
-                    await $`bun run --watch --define "BUILD_STEP='page'" src/dewdrop/dev.ts`
+                    await $`bun run --watch --no-clear-screen --define "BUILD_STEP='page'" src/dewdrop/dev.ts`
                 }
             }
         ]
