@@ -6,13 +6,13 @@
     "@types/bun": "latest"
   },
   "peerDependencies": {
-    "typescript": "^7"
+    "typescript": "^7.0.2"
   },
   "scripts": {
     "dewdrop": "bun run src/dewdrop/dewdrop.ts"
   },
   "dependencies": {
     "@clack/prompts": "^1.8.1",
-    "linkedom": "^0.18.13"
+    "linkedom": "^0.18.14"
   }
 }
