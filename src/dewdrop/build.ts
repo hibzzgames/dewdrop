@@ -104,6 +104,68 @@ export async function Build( mode : BuildType ) : Promise< BuildOutput >
             AddWebpageScript( ctx.doc, code_route, true );
         }
 
+        // Additionally, in the dev mode, inject a script to reroute the browser's console.log to 
+        // the terminal application that's hosting the dev server
+        if( mode === 'dev' )
+        {
+            const code_route = '/scripts/dev-log.js';
+            if( !build_output.files.has( code_route ) )
+            {
+                const code = `( () => {\n` +
+                             `const socket = new WebSocket( 'ws://' + location.host );\n` +
+                             `const queue = [];\n` +
+                             `socket.addEventListener( 'open', () => queue.splice( 0 ).forEach( ( msg ) => socket.send( msg ) ) );\n` +
+                             
+                             `function Send( msg )\n` +
+                             `{\n` +
+                             `    socket.readyState === 1 ? socket.send( msg ) : queue.push( msg );\n` +
+                             `}\n` +
+                             
+                             `function Serialize( value )\n` +
+                             `{\n` +
+                             `    if( value instanceof Error )\n` +
+                             `    {\n` +
+                             `        return value.stack || String( value );\n` +
+                             `    }\n` +
+                             `    if( typeof value === 'object' && value !== null )\n` +
+                             `    {\n` +
+                             `        try\n` +
+                             `        {\n` +
+                             `            return JSON.stringify( value );\n` +
+                             `        }\n` +
+                             `        catch\n` +
+                             `        {\n` +
+                             `            return String( value );\n` +
+                             `        }\n` +
+                             `    }\n` +
+                             `    return String( value );\n` +
+                             `}\n` +
+                             
+                             `function Report( level, args )\n` +
+                             `{\n` +
+                             `    Send( JSON.stringify( { type: 'console', level, page: location.pathname, args } ) );\n` +
+                             `}\n` +
+                             
+                             `for( const level of [ 'log', 'info', 'warn', 'error', 'debug' ] )\n` +
+                             `{\n` +
+                             `    const original = console[ level ];\n` +
+                             `    console[ level ] = ( ...args ) => \n` +
+                             `    {\n` +
+                             `        original.apply( console, args );\n` +
+                             `        Report( level, args.map( Serialize ) );\n` +
+                             `    }\n` +
+                             `}\n` +
+                             
+                             `addEventListener( 'error', e => Report( 'error', [ e.message + ' (' + e.filename + ':' + e.lineno + ')' ] ) );\n` +
+                             `addEventListener( 'unhandledrejection', e => Report( 'error', [ 'Unhandled rejection: ' + Serialize( e.reason ) ] ) );\n` +
+                             `} )();`
+
+                build_output.files.set( code_route, code );
+            }
+
+            AddWebpageScript( ctx.doc, code_route, false );
+        }
+
         // Loop around all in-line styles set by the components, extract them out, and place it in 
         // the added style tag
         ApplyCss( ctx.doc.body, ctx );

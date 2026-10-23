@@ -7,7 +7,7 @@
 // -------------------------------------------------------------------------------------------------
 
 import { watch } from "fs";
-import { Input, Log } from "dewdrop/shell";
+import { ANSI_RED, ANSI_RESET, ANSI_YELLOW, Input, Log } from "dewdrop/shell";
 import { Build, type BuildOutput } from "dewdrop/build";
 
 // Run the build script on script run
@@ -95,7 +95,29 @@ Bun.serve( {
     },
     websocket:
     {
-        message() {}, // heartbeat to reload the webpage
+        // Console logs gets piped here. Also, serves as heartbeat to reload the webpage
+        message( ws, msg )
+        {
+            if( typeof msg !== 'string' ) { return; }
+            const data = JSON.parse( msg );
+            if( data.type === 'console' )
+            {
+                const color_code = data.level === 'error' ? ANSI_RED 
+                                 : data.level === 'warn' ? ANSI_YELLOW 
+                                 : '';
+                const color_reset = data.level === 'error' || data.level === 'warn' ? ANSI_RESET : '';
+                const time_str = ( new Date() ).toLocaleTimeString();
+                const formatted_text = `${ color_code }${ time_str } (${ data.page })${ color_reset } ${ data.args.join( ' ' ) }`;
+                
+                switch( data.level )
+                {
+                    case 'error': Log.error( formatted_text );   break;
+                    case 'warn':  Log.warn( formatted_text );    break;
+                    case 'info':  Log.info( formatted_text );    break;
+                    default:      Log.message( formatted_text ); break;
+                }
+            }
+        },
     },
 } );
 

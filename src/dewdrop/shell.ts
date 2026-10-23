@@ -22,7 +22,9 @@ export const ANSI_ERASE_LINE : string = `\x1b[2K`;
 
 // I really wanted to use Bun.Color( 'magenta', ansi ), but for some reason the color wasn't right 
 // at all
-const ANSI_MAGENTA : string = '\x1b[35m';
+export const ANSI_MAGENTA : string = '\x1b[35m';
+export const ANSI_YELLOW  : string = '\x1b[33m';
+export const ANSI_RED     : string = '\x1b[31m';
 
 const LOG_DEFAULTS : LogMessageOptions = { spacing: 0 };
 
